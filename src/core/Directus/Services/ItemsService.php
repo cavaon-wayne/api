@@ -26,6 +26,8 @@ class ItemsService extends AbstractService
 
     const PASSWORD_FIELD = 'password';
 
+    const TRANSACTION_KEY='$transaction';
+
     public function createItem($collection, $payload, $params = [])
     {
         $this->enforceCreatePermissions($collection, $payload, $params);
@@ -51,7 +53,7 @@ class ItemsService extends AbstractService
             }
         }
         $tableGateway = $this->createTableGateway($collection);
-        $newRecord = $tableGateway->createRecord($payload, $this->getCRUDParams($params));
+        $newRecord = $this->wrapInTransaction($tableGateway,'createRecord',[$payload, $this->getCRUDParams($params)],$params);
 
         try {
             $item = $this->find(
@@ -361,7 +363,7 @@ class ItemsService extends AbstractService
 
         // Fetch the entry even if it's not "published"
         $params['status'] = '*';
-        $newRecord = $tableGateway->updateRecord($id, $payload, $this->getCRUDParams($params));
+        $newRecord =$this->wrapInTransaction($tableGateway,'updateRecord',[$id, $payload, $this->getCRUDParams($params)],$params);
 
         try {
             $item = $this->find(
@@ -384,7 +386,7 @@ class ItemsService extends AbstractService
         // $item = $this->find($collection, $id);
 
         $tableGateway = $this->createTableGateway($collection);
-        $tableGateway->deleteRecord($id, $this->getCRUDParams($params));
+        $this->wrapInTransaction($tableGateway,'deleteRecord',[$id, $this->getCRUDParams($params)],$params);
 
         return true;
     }
@@ -578,5 +580,28 @@ class ItemsService extends AbstractService
             return !empty($junctionEntries['data']) ? true : false;
         }
         return false;
+    }
+
+    protected function wrapInTransaction(TableGateway $tableGateway,$callbck,$params=[],$queryPparams=[])
+    {
+        $enableTransaction=ArrayUtils::get($queryPparams,self::TRANSACTION_KEY,false);
+        $dbCoonnection=null;
+        $result=null;
+        try{
+            if($enableTransaction){
+                $dbCoonnection=$tableGateway->getAdapter()->getDriver()->getConnection();
+                $dbCoonnection->beginTransaction();
+            }
+            $result = call_user_func([$tableGateway,$callbck],$params);
+            if($dbCoonnection){
+                $dbCoonnection->commit();
+            }
+        }catch(\Exception $e){
+            if($dbCoonnection){
+                $dbCoonnection->rollback();
+            }
+            throw $e;
+        }
+        return $result;
     }
 }
