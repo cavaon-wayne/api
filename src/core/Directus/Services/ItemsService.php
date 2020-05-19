@@ -26,7 +26,7 @@ class ItemsService extends AbstractService
 
     const PASSWORD_FIELD = 'password';
 
-    const TRANSACTION_KEY='$transaction';
+    const TRANSACTION_FLAG='$transaction';
 
     public function createItem($collection, $payload, $params = [])
     {
@@ -584,7 +584,7 @@ class ItemsService extends AbstractService
 
     protected function wrapInTransaction(TableGateway $tableGateway,$callbck,$params=[],$queryPparams=[])
     {
-        $enableTransaction=ArrayUtils::get($queryPparams,self::TRANSACTION_KEY,false);
+        $enableTransaction=ArrayUtils::get($queryPparams,self::TRANSACTION_FLAG,false);
         $dbCoonnection=null;
         $result=null;
         try{
@@ -592,7 +592,7 @@ class ItemsService extends AbstractService
                 $dbCoonnection=$tableGateway->getAdapter()->getDriver()->getConnection();
                 $dbCoonnection->beginTransaction();
             }
-            $result = call_user_func([$tableGateway,$callbck],$params);
+            $result = call_user_func_array([$tableGateway,$callbck],$params);
             if($dbCoonnection){
                 $dbCoonnection->commit();
             }
